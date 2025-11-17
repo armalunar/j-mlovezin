@@ -1,0 +1,104 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ==========================================
+    // HELPER FUNCTIONS
+    // ==========================================
+    
+    // Verifica se o usuário está autenticado
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Verifica se o usuário é dono do documento (userId no documento)
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // Verifica se o usuário é dono do documento atual (resource.data.userId)
+    function isDocumentOwner() {
+      return isSignedIn() && request.auth.uid == resource.data.userId;
+    }
+    
+    // Verifica se o novo documento terá o userId correto
+    function isCreatingOwnDocument() {
+      return isSignedIn() && request.auth.uid == request.resource.data.userId;
+    }
+    
+    // ==========================================
+    // RULES POR COLEÇÃO
+    // ==========================================
+    
+    // USERS - Usuários podem ler e atualizar seus próprios dados
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update, delete: if isSignedIn() && isOwner(userId);
+    }
+    
+    // CONTADOR - Todos podem ler, apenas o sistema pode escrever
+    match /contador/{docId} {
+      allow read: if true; // Público para leitura
+      allow write: if isSignedIn(); // Apenas usuários autenticados podem atualizar
+    }
+    
+    // TOUCHES - Registro de toques, usuários podem criar e ler seus próprios
+    match /touches/{touchId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isCreatingOwnDocument();
+      allow update, delete: if isDocumentOwner();
+    }
+    
+    // CARTINHAS - Cartas privadas entre os usuários
+    match /cartinhas/{cartinhaId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isCreatingOwnDocument();
+      allow update, delete: if isDocumentOwner();
+    }
+    
+    // PHOTOS - Fotos compartilhadas
+    match /photos/{photoId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isCreatingOwnDocument();
+      allow update, delete: if isDocumentOwner();
+    }
+    
+    // PHOTO COMMENTS - Comentários nas fotos
+    match /photoComments/{commentId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isCreatingOwnDocument();
+      allow update, delete: if isDocumentOwner();
+    }
+    
+    // POSTITS - Post-its compartilhados
+    match /postits/{postitId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isCreatingOwnDocument();
+      allow update, delete: if isDocumentOwner();
+    }
+    
+    // NOTES - Notas privadas
+    match /notes/{noteId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isCreatingOwnDocument();
+      allow update, delete: if isDocumentOwner();
+    }
+    
+    // DRAWINGS - Desenhos compartilhados
+    match /drawings/{drawingId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && 
+        (resource.data.userId == request.auth.uid || !exists(/databases/$(database)/documents/drawings/$(drawingId)));
+    }
+    
+    // ==========================================
+    // REGRA PADRÃO (DENY)
+    // ==========================================
+    // Qualquer caminho não especificado acima é negado
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
